@@ -23,4 +23,5 @@ add_executable(${PROJECT_NAME}
         Server/ServerOperations.cpp
         Server/ServerOperations.h
         Utils/Random.cpp
-        Utils/Random.h)
+        Utils/Random.h
+        Server/InputData.h)

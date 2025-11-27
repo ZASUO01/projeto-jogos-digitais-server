@@ -7,6 +7,7 @@
 #include <thread>
 #include <vector>
 #include <utility>
+#include <chrono>
 #include "../Network/Socket.h"
 
 enum class ServerState {
@@ -15,8 +16,9 @@ enum class ServerState {
 };
 
 struct client  {
-    uint32_t nonce;
-    sockaddr_in addr;
+    uint32_t nonce{};
+    sockaddr_in addr{};
+    std::chrono::steady_clock::time_point lastUpdate;
 } ;
 
 class Server {
@@ -35,6 +37,8 @@ private:
     void ReceivePackets();
     void HandleSynPacket(const Packet *pk, sockaddr_in* addr4);
     void HandleAckPacket(const Packet *pk, const sockaddr_in* addr4);
+    void HandleDataPacket(const Packet *pk);
+    void HandleActiveConnections();
 
     void Quit();
     static void PrintLocalIpAddr();
@@ -54,6 +58,9 @@ private:
     // packets control
 
     // Threads
+    static constexpr int CONNECTIONS_CHECK_SLEEP_SECONDS = 1;
+    static constexpr int CONNECTION_TIMEOUT_SECONDS = 10;
     std::mutex mMutex;
     std::thread mReceivingThread;
+    std::thread mConnectionsCheckThread;
 };

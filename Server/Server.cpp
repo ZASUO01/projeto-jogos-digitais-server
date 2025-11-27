@@ -8,6 +8,7 @@
 #include <sstream>
 #include <algorithm>
 
+#include "InputData.h"
 #include "ServerOperations.h"
 #include "../Network/Addresses.h"
 #include "../Network/NetUtils.h"
@@ -29,7 +30,7 @@ bool Server::Initialize() {
 
     InitServerOperations();
 
-    std::cout << "server initialized" << std::endl;
+    std::cout << "server initialized\n";
 
     mState = ServerState::SERVER_RUNNING;
     return true;
@@ -90,6 +91,10 @@ void Server::InitServerOperations() {
     }
 
     mReceivingThread = std::thread(&Server::ReceivePackets, this);
+    std::cout << "init packets receiving\n";
+
+    mConnectionsCheckThread = std::thread(&Server::HandleActiveConnections, this);
+    std::cout << "init connections checking\n";
 }
 
 void Server::StopServerOperations() {
@@ -100,6 +105,12 @@ void Server::StopServerOperations() {
     if (mReceivingThread.joinable()) {
         mReceivingThread.join();
     }
+    std::cout << "finished packets receiving\n";
+
+    if (mConnectionsCheckThread.joinable()) {
+        mConnectionsCheckThread.join();
+    }
+    std::cout << "finished checking active connections\n";
 }
 
 void Server::ReceivePackets() {
@@ -129,7 +140,7 @@ void Server::ReceivePackets() {
             &packet,
             &clientAddr)) {
             continue;
-        }
+            }
 
         if (!packet.IsValid()) {
             continue;
@@ -142,6 +153,10 @@ void Server::ReceivePackets() {
             }
             case Packet::ACK_FLAG: {
                 HandleAckPacket(&packet, &clientAddr);
+                break;
+            }
+            case Packet::DATA_FLAG:{
+                HandleDataPacket(&packet);
                 break;
             }
             default:
@@ -201,9 +216,66 @@ void Server::HandleAckPacket(const Packet *pk, const sockaddr_in *addr4) {
         return;
     }
 
-    client c{clientNonce, *addr4};
+    client c{clientNonce, *addr4, std::chrono::steady_clock::now()};
     mConnectedClients.emplace_back(c);
 }
+
+void Server::HandleDataPacket(const Packet *pk) {
+    const auto clientNonce = pk->GetNonce();
+
+    std::lock_guard lock(mMutex);
+    const auto it = std::find_if(
+        mConnectedClients.begin(),
+        mConnectedClients.end(),
+        [&clientNonce](const client& c) {
+           return c.nonce == clientNonce;
+    });
+
+    if (it == mConnectedClients.end()) {
+        return;
+    }
+    it->lastUpdate = std::chrono::steady_clock::now();
+
+    const auto data = static_cast<const InputData *>(pk->GetData());
+}
+
+void Server::HandleActiveConnections() {
+    const auto sleepInterval = std::chrono::seconds(CONNECTIONS_CHECK_SLEEP_SECONDS);
+    const auto timeout = std::chrono::seconds(CONNECTION_TIMEOUT_SECONDS);
+    bool shouldRun = true;
+
+    while (true) {
+        {
+            std::lock_guard lock(mMutex);
+            if (!mRunning) {
+                shouldRun = false;
+            }
+        }
+
+        if (!shouldRun) {
+            break;
+        }
+
+        {
+            std::lock_guard lock(mMutex);
+            std::chrono::steady_clock::time_point now = std::chrono::steady_clock::now();
+
+            auto it = std::remove_if(
+                mConnectedClients.begin(),
+                mConnectedClients.end(),
+                [&now, &timeout](const client& c) {
+                    const auto secondsPassed= std::chrono::duration_cast<std::chrono::seconds>(now - c.lastUpdate);
+
+                    return secondsPassed >= timeout;
+                }
+            );
+
+            mConnectedClients.erase(it, mConnectedClients.end());
+        }
+        std::this_thread::sleep_for(sleepInterval);
+    }
+}
+
 
 void Server::Helper() {
     std::cout << "help: see available options" << std::endl;
@@ -234,7 +306,7 @@ void Server::PrintClients() {
     std::cout << "Total clients: " << mConnectedClients.size() << std::endl;
 
     char ip[INET_ADDRSTRLEN];
-    for (auto [nonce, addr] : mConnectedClients) {
+    for (auto [nonce, addr, lastUpdate] : mConnectedClients) {
         inet_ntop(AF_INET, &addr, ip, INET_ADDRSTRLEN);
         std::cout << ip << std::endl;
     }

@@ -237,6 +237,9 @@ void Server::HandleDataPacket(const Packet *pk) {
     it->lastUpdate = std::chrono::steady_clock::now();
 
     const auto data = static_cast<const InputData *>(pk->GetData());
+    if (data->IsKeyActive(KeyValue::MOVE_FORWARD)) {
+        std::cout << "W pressed \n";
+    }
 }
 
 void Server::HandleActiveConnections() {

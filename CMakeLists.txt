@@ -24,4 +24,9 @@ add_executable(${PROJECT_NAME}
         Server/ServerOperations.h
         Utils/Random.cpp
         Utils/Random.h
-        Server/InputData.h)
+        Server/InputData.h
+)
+
+if(WIN32)
+    target_link_libraries(${PROJECT_NAME} PRIVATE ws2_32)
+endif ()

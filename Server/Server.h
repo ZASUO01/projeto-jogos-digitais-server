@@ -19,7 +19,7 @@ struct client  {
     uint32_t nonce{};
     sockaddr_in addr{};
     std::chrono::steady_clock::time_point lastUpdate;
-} ;
+};
 
 class Server {
 public:
@@ -46,7 +46,7 @@ private:
     void PrintClients();
 
     ServerState mState;
-    int mSocket;
+    SocketType mSocket;
     bool mRunning;
 
     // Connections control

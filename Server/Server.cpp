@@ -13,6 +13,8 @@
 #include "../Network/Addresses.h"
 #include "../Network/NetUtils.h"
 
+int Server::currentStateId = 0;
+
 Server::Server()
 :mState(ServerState::SERVER_DOWN)
 ,mSocket(-1)
@@ -98,10 +100,6 @@ void Server::InitServerOperations() {
 }
 
 void Server::StopServerOperations() {
-    if (mState != ServerState::SERVER_RUNNING) {
-        return;
-    }
-
     if (mReceivingThread.joinable()) {
         mReceivingThread.join();
     }
@@ -159,6 +157,10 @@ void Server::ReceivePackets() {
                 HandleDataPacket(&packet);
                 break;
             }
+            case Packet::END_FLAG: {
+                HandleEndPacket(&packet);
+                break;
+            }
             default:
                 break;
         }
@@ -167,7 +169,8 @@ void Server::ReceivePackets() {
 
 void Server::HandleSynPacket(const Packet *pk, sockaddr_in* addr4) {
     std::lock_guard lock(mMutex);
-    if (mConnectionRequests.size() == MAX_CONNECTION_REQUESTS) {
+    if (mConnectedClients.size() == MAX_CONNECTIONS ||
+        mConnectionRequests.size() == MAX_CONNECTION_REQUESTS) {
         return;
     }
 
@@ -177,22 +180,33 @@ void Server::HandleSynPacket(const Packet *pk, sockaddr_in* addr4) {
     const auto it = std::find_if(
         mConnectionRequests.begin(),
         mConnectionRequests.end(),
-        [&clientNonce](const std::pair<uint32_t, uint32_t>& request) {
-            return request.first == clientNonce;
+        [&clientNonce](const ConnectionRequest& request) {
+            return request.requestNonce == clientNonce;
         }
     );
 
     const uint32_t serverNonce = NetUtils::getRandomNonce(clientNonce);
 
     if (it == mConnectionRequests.end()) {
-        mConnectionRequests.emplace_back(clientNonce, serverNonce);
+        ConnectionRequest request;
+        request.requestNonce = clientNonce;
+        request.connectionNonce = serverNonce;
+        request.lastRequestTime = std::chrono::steady_clock::now();
+
+        mConnectionRequests.emplace_back(request);
     }else {
-        it->second = serverNonce;
+        it->connectionNonce = serverNonce;
+        it->lastRequestTime = std::chrono::steady_clock::now();
     }
 
     const uint16_t serverSequence = clientSequence + 1;
-
-    ServerOperations::sendSynAckToClient(this, serverNonce, serverSequence, addr4);
+    ServerOperations::sendSingleResponseToClient(
+        this,
+        serverNonce,
+        serverSequence,
+        Packet::SYN_ACK_FLAG,
+        addr4
+    );
 }
 
 void Server::HandleAckPacket(const Packet *pk, const sockaddr_in *addr4) {
@@ -202,43 +216,84 @@ void Server::HandleAckPacket(const Packet *pk, const sockaddr_in *addr4) {
     const auto it = std::find_if(
        mConnectionRequests.begin(),
        mConnectionRequests.end(),
-       [&clientNonce](const std::pair<uint32_t, uint32_t>& request) {
-           return request.second == clientNonce;
+       [&clientNonce](const ConnectionRequest& request) {
+           return request.connectionNonce == clientNonce;
        }
    );
 
     if (it == mConnectionRequests.end()) {
+        // Check end ACK
+        const auto conn = std::find_if(
+            mConnectedClients.begin(),
+            mConnectedClients.end(),
+            [&clientNonce](const Connection& connection) {
+                return connection.nonce == clientNonce;
+            }
+        );
+        if (conn != mConnectedClients.end()) {
+            mConnectedClients.erase(conn);
+        }
         return;
     }
     mConnectionRequests.erase(it);
-
     if (mConnectedClients.size() == MAX_CONNECTIONS) {
         return;
     }
 
-    client c{clientNonce, *addr4, std::chrono::steady_clock::now()};
-    mConnectedClients.emplace_back(c);
+    Connection connection;
+    connection.nonce = clientNonce;
+    connection.addr = *addr4;
+    connection.lastUpdate = std::chrono::steady_clock::now();
+    connection.stateId = currentStateId;
+    currentStateId++;
+
+    mConnectedClients.emplace_back(connection);
 }
 
 void Server::HandleDataPacket(const Packet *pk) {
     const auto clientNonce = pk->GetNonce();
 
     std::lock_guard lock(mMutex);
-    const auto it = std::find_if(
+    const auto conn = std::find_if(
         mConnectedClients.begin(),
         mConnectedClients.end(),
-        [&clientNonce](const client& c) {
-           return c.nonce == clientNonce;
+        [&clientNonce](const Connection& connection) {
+           return connection.nonce == clientNonce;
     });
 
-    if (it == mConnectedClients.end()) {
-        return;
+    if (conn != mConnectedClients.end()) {
+        conn->lastUpdate = std::chrono::steady_clock::now();
     }
-    it->lastUpdate = std::chrono::steady_clock::now();
 
+    /*
     const auto data = static_cast<const InputData *>(pk->GetData());
-    if (data->IsKeyActive(KeyValue::MOVE_FORWARD)) {
-        std::cout << "W pressed \n";
+    std::cout << "received from: " << clientNonce << "\n";
+    */
+}
+
+void Server::HandleEndPacket(const Packet *pk) {
+    const auto clientNonce = pk->GetNonce();
+    const auto clientSequence = pk->GetSequence();
+
+    std::lock_guard lock(mMutex);
+    const auto conn = std::find_if(
+        mConnectedClients.begin(),
+        mConnectedClients.end(),
+        [&clientNonce](const Connection& connection) {
+           return connection.nonce == clientNonce;
+    });
+
+    if (conn != mConnectedClients.end()) {
+        conn->lastUpdate = std::chrono::steady_clock::now();
+
+        const uint16_t serverSequence = clientSequence + 1;
+        ServerOperations::sendSingleResponseToClient(
+            this,
+            conn->nonce,
+            serverSequence,
+            Packet::END_ACK_FLAG,
+            &conn->addr
+        );
     }
 }
 
@@ -263,22 +318,31 @@ void Server::HandleActiveConnections() {
             std::lock_guard lock(mMutex);
             std::chrono::steady_clock::time_point now = std::chrono::steady_clock::now();
 
-            auto it = std::remove_if(
-                mConnectedClients.begin(),
-                mConnectedClients.end(),
-                [&now, &timeout](const client& c) {
-                    const auto secondsPassed= std::chrono::duration_cast<std::chrono::seconds>(now - c.lastUpdate);
+            auto requestsEnd = std::remove_if(
+                mConnectionRequests.begin(),
+                mConnectionRequests.end(),
+                [&now, &timeout](const ConnectionRequest& request) {
+                    const auto secondsPassed= std::chrono::duration_cast<std::chrono::seconds>(now - request.lastRequestTime);
 
                     return secondsPassed >= timeout;
                 }
             );
+            mConnectionRequests.erase(requestsEnd, mConnectionRequests.end());
 
-            mConnectedClients.erase(it, mConnectedClients.end());
+            auto connectionsEnd = std::remove_if(
+                mConnectedClients.begin(),
+                mConnectedClients.end(),
+                [&now, &timeout](const Connection& connection) {
+                    const auto secondsPassed= std::chrono::duration_cast<std::chrono::seconds>(now - connection.lastUpdate);
+
+                    return secondsPassed >= timeout;
+                }
+            );
+            mConnectedClients.erase(connectionsEnd, mConnectedClients.end());
         }
         std::this_thread::sleep_for(sleepInterval);
     }
 }
-
 
 void Server::Helper() {
     std::cout << "help: see available options" << std::endl;
@@ -309,9 +373,9 @@ void Server::PrintClients() {
     std::cout << "Total clients: " << mConnectedClients.size() << std::endl;
 
     char ip[INET_ADDRSTRLEN];
-    for (auto [nonce, addr, lastUpdate] : mConnectedClients) {
-        inet_ntop(AF_INET, &addr, ip, INET_ADDRSTRLEN);
-        std::cout << ip << std::endl;
+    for (auto connection : mConnectedClients) {
+        inet_ntop(AF_INET, &connection.addr, ip, INET_ADDRSTRLEN);
+        std::cout << connection.stateId << ": "<< ip << std::endl;
     }
 }
 

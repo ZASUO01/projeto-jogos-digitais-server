@@ -6,13 +6,18 @@
 #include "../Network/Packet.h"
 #include "../Network/Socket.h"
 
-void ServerOperations::sendSynAckToClient(
+void ServerOperations::sendSingleResponseToClient(
     const Server *server,
     const uint32_t nonce,
-    const uint16_t sequence ,
-    sockaddr_in * clientAddr
+    const uint16_t sequence,
+    const uint8_t flag,
+    sockaddr_in *clientAddr
 ) {
-    Packet packet(sequence, Packet::SYN_ACK_FLAG, nonce);
+    if (flag != Packet::SYN_ACK_FLAG && flag != Packet::END_ACK_FLAG) {
+        return;
+    }
+
+    Packet packet(sequence, flag, nonce);
     packet.BuildPacket();
 
     constexpr size_t packetSize = Packet::PACKET_HEADER_BYTES;
@@ -21,5 +26,6 @@ void ServerOperations::sendSynAckToClient(
         server->GetSocket(),
         &packet,
         packetSize,
-        clientAddr);
+        clientAddr
+    );
 }

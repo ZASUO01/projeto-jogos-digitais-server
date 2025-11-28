@@ -8,10 +8,11 @@
 #include <cstdlib>
 
 namespace  ServerOperations {
-    void sendSynAckToClient(
+    void sendSingleResponseToClient(
         const Server *server,
         uint32_t nonce,
         uint16_t sequence,
+        uint8_t flag,
         sockaddr_in *clientAddr
     );
 };

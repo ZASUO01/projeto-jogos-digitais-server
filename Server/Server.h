@@ -6,65 +6,56 @@
 #include <mutex>
 #include <thread>
 #include <vector>
-#include <optional>
-#include <chrono>
-
+#include "./Connections.h"
+#include "../Game/GameState.h"
 #include "../Network/Socket.h"
+#include "../Utils/ThreadQueue.h"
 
 enum class ServerState {
     SERVER_DOWN,
-    SERVER_RUNNING
+    SERVER_RUNNING,
 };
 
-// It represents a client connection request,
-// and it is used while the client is not connected yet
-struct ConnectionRequest {
-    uint32_t requestNonce;
-    uint32_t connectionNonce;
-    std::chrono::steady_clock::time_point lastRequestTime;
-
-    ConnectionRequest() : requestNonce(0), connectionNonce(0) {}
-};
-
-// It represents a client connected to the server
-// and contains all the connection information
-struct Connection  {
-    uint32_t nonce;
-    sockaddr_in addr;
-    std::chrono::steady_clock::time_point lastUpdate;
-    int stateId;
-
-    Connection()
-        :nonce(0),
-        addr{},
-        stateId(-1){}
+struct ClientCommand {
+    InputData data;
+    int clientId;
 };
 
 class Server {
 public:
     Server();
-    ~Server() { Shutdown(); }
+    ~Server();
 
-    bool Initialize();
+    void Initialize();
     void ReadInputs();
     void Shutdown();
 
     [[nodiscard]] int GetSocket() const { return mSocket; }
 private:
+    // operations Control
     void InitServerOperations();
     void StopServerOperations();
+
+    // Thread workers
     void ReceivePackets();
+    void CheckConnections();
+    void ProcessState();
+
+    // Operations used by the thread workers
     void HandleSynPacket(const Packet *pk, sockaddr_in* addr4);
     void HandleAckPacket(const Packet *pk, const sockaddr_in* addr4);
     void HandleDataPacket(const Packet *pk);
     void HandleEndPacket(const Packet *pk);
-    void HandleActiveConnections();
+    void SendStateToClients();
 
+    // Helpers called by the server inputs
     void Quit();
     static void PrintLocalIpAddr();
     static void Helper();
     void PrintClients();
+    void PrintState();
 
+    // General
     ServerState mState;
     SocketType mSocket;
     bool mRunning;
@@ -72,16 +63,21 @@ private:
     // Connections control
     static constexpr int MAX_CONNECTION_REQUESTS = 10;
     static constexpr int MAX_CONNECTIONS = 10;
-    static int currentStateId;
+    static int currentClientId;
     std::vector<ConnectionRequest> mConnectionRequests;
     std::vector<Connection> mConnectedClients;
-
-    // packets control
 
     // Threads
     static constexpr int CONNECTIONS_CHECK_SLEEP_SECONDS = 1;
     static constexpr int CONNECTION_TIMEOUT_SECONDS = 10;
     std::mutex mMutex;
     std::thread mReceivingThread;
-    std::thread mConnectionsCheckThread;
+    std::thread mConnectionsChecker;
+    std::thread mStateProcessingThread;
+
+    // Game state control
+    static constexpr int GAME_STATE_TICK_RATE = 60;
+    GameState *mGameState;
+    std::mutex mCommandsMutex;
+    ThreadQueue<ClientCommand> mCommandsQueue;
 };

@@ -15,6 +15,14 @@ namespace  ServerOperations {
         uint8_t flag,
         sockaddr_in *clientAddr
     );
+
+    void sendStateDataToClient(
+        const Server *server,
+        uint32_t nonce,
+        uint16_t sequence,
+        sockaddr_in *clientAddr,
+        const RawState *state
+    );
 };
 
 

@@ -13,33 +13,52 @@
 #include "../Network/Addresses.h"
 #include "../Network/NetUtils.h"
 
-int Server::currentStateId = 0;
+int Server::currentClientId = 0;
 
 Server::Server()
 :mState(ServerState::SERVER_DOWN)
 ,mSocket(-1)
 ,mRunning(false)
+,mGameState(nullptr)
 {}
 
-bool Server::Initialize() {
+Server::~Server() {
+    Shutdown();
+}
+
+void Server::Initialize() {
+    std::lock_guard lock(mMutex);
     if (mState != ServerState::SERVER_DOWN) {
-        return false;
+        return;
     }
 
     mSocket = SocketUtils::createSocketV4();
     SocketUtils::bindSocketToAnyV4(mSocket);
+    mGameState = new GameState();
     mRunning = true;
 
-    InitServerOperations();
+    mReceivingThread = std::thread(&Server::ReceivePackets, this);
+    std::cout << "init packets receiving\n";
 
-    std::cout << "server initialized\n";
+    mConnectionsChecker = std::thread(&Server::CheckConnections, this);
+    std::cout << "init connections checking\n";
+
+    mStateProcessingThread = std::thread(&Server::ProcessState, this);
+    std::cout << "init processing state\n";
 
     mState = ServerState::SERVER_RUNNING;
-    return true;
+    std::cout << "server initialized\n";
 }
 
 void Server::ReadInputs() {
-    while (mRunning) {
+    {
+        std::lock_guard lock(mMutex);
+        if (mState != ServerState::SERVER_RUNNING) {
+            return;
+        }
+    }
+
+    while (true) {
         std::cout << "Type help to see the available commands" << std::endl;
 
         std::string line;
@@ -70,45 +89,46 @@ void Server::ReadInputs() {
         else if (line == "clients") {
             PrintClients();
         }
+
+        else if (line == "state") {
+            PrintState();
+        }
     }
 }
 
 void Server::Shutdown() {
-    if (mState != ServerState::SERVER_RUNNING) {
-        return;
+    {
+        std::lock_guard lock(mMutex);
+        if (mState != ServerState::SERVER_RUNNING) {
+            return;
+        }
+        mRunning = false;
     }
 
-    StopServerOperations();
-
-    close_socket(mSocket);
-
-    mState = ServerState::SERVER_DOWN;
-
-    std::cout << "Server stopped" << std::endl;
-}
-
-void Server::InitServerOperations() {
-    if (mState != ServerState::SERVER_DOWN) {
-        return;
-    }
-
-    mReceivingThread = std::thread(&Server::ReceivePackets, this);
-    std::cout << "init packets receiving\n";
-
-    mConnectionsCheckThread = std::thread(&Server::HandleActiveConnections, this);
-    std::cout << "init connections checking\n";
-}
-
-void Server::StopServerOperations() {
     if (mReceivingThread.joinable()) {
         mReceivingThread.join();
     }
     std::cout << "finished packets receiving\n";
 
-    if (mConnectionsCheckThread.joinable()) {
-        mConnectionsCheckThread.join();
+    if (mConnectionsChecker.joinable()) {
+        mConnectionsChecker.join();
     }
     std::cout << "finished checking active connections\n";
+
+    if (mStateProcessingThread.joinable()) {
+        mStateProcessingThread.join();
+    }
+    std::cout << "finished processing state\n";
+
+    std::lock_guard lock(mMutex);
+    delete mGameState;
+    mGameState = nullptr;
+
+    close_socket(mSocket);
+    mSocket = -1;
+
+    mState = ServerState::SERVER_DOWN;
+    std::cout << "Server stopped" << std::endl;
 }
 
 void Server::ReceivePackets() {
@@ -138,7 +158,7 @@ void Server::ReceivePackets() {
             &packet,
             &clientAddr)) {
             continue;
-            }
+        }
 
         if (!packet.IsValid()) {
             continue;
@@ -163,6 +183,85 @@ void Server::ReceivePackets() {
             }
             default:
                 break;
+        }
+    }
+}
+
+void Server::CheckConnections() {
+    const auto sleepInterval = std::chrono::seconds(CONNECTIONS_CHECK_SLEEP_SECONDS);
+    const auto timeout = std::chrono::seconds(CONNECTION_TIMEOUT_SECONDS);
+    bool shouldRun = true;
+
+    while (true) {
+        {
+            std::lock_guard lock(mMutex);
+            if (!mRunning) {
+                shouldRun = false;
+            }
+        }
+
+        if (!shouldRun) {
+            break;
+        }
+
+        {
+            std::lock_guard lock(mMutex);
+            std::chrono::steady_clock::time_point now = std::chrono::steady_clock::now();
+
+            auto requestsEnd = std::remove_if(
+                mConnectionRequests.begin(),
+                mConnectionRequests.end(),
+                [&now, &timeout](const ConnectionRequest& request) {
+                    const auto secondsPassed= std::chrono::duration_cast<std::chrono::seconds>(now - request.lastRequestTime);
+
+                    return secondsPassed >= timeout;
+                }
+            );
+            mConnectionRequests.erase(requestsEnd, mConnectionRequests.end());
+
+            for (auto it = mConnectedClients.begin(); it != mConnectedClients.end();) {
+                if (const auto secondsPassed = std::chrono::duration_cast<std::chrono::seconds>(now - it->lastUpdate); secondsPassed >= timeout) {
+                    const auto idToRemove = it->clientId;
+
+                    mGameState->RemoveClient(idToRemove);
+
+                    it = mConnectedClients.erase(it);
+                } else {
+                    ++it;
+                }
+            }
+        }
+        std::this_thread::sleep_for(sleepInterval);
+    }
+}
+
+void Server::ProcessState() {
+    bool shouldRun = true;
+    const auto tickDuration = std::chrono::milliseconds(1000 / GAME_STATE_TICK_RATE);
+
+    while (true) {
+        auto startTime = std::chrono::steady_clock::now();
+
+        {
+            std::lock_guard lock(mMutex);
+            if (!mRunning) {
+                shouldRun = false;
+            }
+        }
+
+        if (!shouldRun) {
+            break;
+        }
+
+        ClientCommand command;
+        while (mCommandsQueue.try_dequeue(command)) {
+            mGameState->Update(&command.data, command.clientId);
+        }
+
+        SendStateToClients();
+
+        if (auto processingTime = std::chrono::steady_clock::now() - startTime; processingTime < tickDuration) {
+            std::this_thread::sleep_for(tickDuration - processingTime);
         }
     }
 }
@@ -231,6 +330,7 @@ void Server::HandleAckPacket(const Packet *pk, const sockaddr_in *addr4) {
             }
         );
         if (conn != mConnectedClients.end()) {
+            mGameState->RemoveClient(conn->clientId);
             mConnectedClients.erase(conn);
         }
         return;
@@ -244,10 +344,12 @@ void Server::HandleAckPacket(const Packet *pk, const sockaddr_in *addr4) {
     connection.nonce = clientNonce;
     connection.addr = *addr4;
     connection.lastUpdate = std::chrono::steady_clock::now();
-    connection.stateId = currentStateId;
-    currentStateId++;
+    connection.clientId = currentClientId;
 
     mConnectedClients.emplace_back(connection);
+    mGameState->AddClient(currentClientId);
+
+    currentClientId++;
 }
 
 void Server::HandleDataPacket(const Packet *pk) {
@@ -263,12 +365,14 @@ void Server::HandleDataPacket(const Packet *pk) {
 
     if (conn != mConnectedClients.end()) {
         conn->lastUpdate = std::chrono::steady_clock::now();
-    }
 
-    /*
-    const auto data = static_cast<const InputData *>(pk->GetData());
-    std::cout << "received from: " << clientNonce << "\n";
-    */
+        if (const auto data = static_cast<const InputData *>(pk->GetData()); !data->NoKeysActive()) {
+            ClientCommand command;
+            command.clientId = conn->clientId;
+            command.data = *data;
+            mCommandsQueue.Enqueue(command);
+        }
+    }
 }
 
 void Server::HandleEndPacket(const Packet *pk) {
@@ -285,6 +389,7 @@ void Server::HandleEndPacket(const Packet *pk) {
 
     if (conn != mConnectedClients.end()) {
         conn->lastUpdate = std::chrono::steady_clock::now();
+        conn->disconnectionCall = true;
 
         const uint16_t serverSequence = clientSequence + 1;
         ServerOperations::sendSingleResponseToClient(
@@ -297,50 +402,22 @@ void Server::HandleEndPacket(const Packet *pk) {
     }
 }
 
-void Server::HandleActiveConnections() {
-    const auto sleepInterval = std::chrono::seconds(CONNECTIONS_CHECK_SLEEP_SECONDS);
-    const auto timeout = std::chrono::seconds(CONNECTION_TIMEOUT_SECONDS);
-    bool shouldRun = true;
-
-    while (true) {
-        {
-            std::lock_guard lock(mMutex);
-            if (!mRunning) {
-                shouldRun = false;
-            }
+void Server::SendStateToClients() {
+    std::lock_guard lock(mMutex);
+    for (auto conn : mConnectedClients) {
+        if (conn.disconnectionCall) {
+            continue;
         }
 
-        if (!shouldRun) {
-            break;
-        }
+        RawState state = mGameState->GetRawState(conn.clientId);
 
-        {
-            std::lock_guard lock(mMutex);
-            std::chrono::steady_clock::time_point now = std::chrono::steady_clock::now();
-
-            auto requestsEnd = std::remove_if(
-                mConnectionRequests.begin(),
-                mConnectionRequests.end(),
-                [&now, &timeout](const ConnectionRequest& request) {
-                    const auto secondsPassed= std::chrono::duration_cast<std::chrono::seconds>(now - request.lastRequestTime);
-
-                    return secondsPassed >= timeout;
-                }
-            );
-            mConnectionRequests.erase(requestsEnd, mConnectionRequests.end());
-
-            auto connectionsEnd = std::remove_if(
-                mConnectedClients.begin(),
-                mConnectedClients.end(),
-                [&now, &timeout](const Connection& connection) {
-                    const auto secondsPassed= std::chrono::duration_cast<std::chrono::seconds>(now - connection.lastUpdate);
-
-                    return secondsPassed >= timeout;
-                }
-            );
-            mConnectedClients.erase(connectionsEnd, mConnectedClients.end());
-        }
-        std::this_thread::sleep_for(sleepInterval);
+        ServerOperations::sendStateDataToClient(
+            this,
+            conn.nonce,
+            0,
+            &conn.addr,
+            &state
+        );
     }
 }
 
@@ -348,7 +425,8 @@ void Server::Helper() {
     std::cout << "help: see available options" << std::endl;
     std::cout << "quit: quit the server" << std::endl;
     std::cout << "addr: show the server local ip address" << std::endl;
-    std::cout << "clients: shown the current connected clients" << std::endl;
+    std::cout << "clients: show the current connected clients" << std::endl;
+    std::cout << "state: show the current game state" << std::endl;
 }
 
 void Server::Quit() {
@@ -375,8 +453,8 @@ void Server::PrintClients() {
     char ip[INET_ADDRSTRLEN];
     for (auto connection : mConnectedClients) {
         inet_ntop(AF_INET, &connection.addr, ip, INET_ADDRSTRLEN);
-        std::cout << connection.stateId << ": "<< ip << std::endl;
+        std::cout << connection.clientId << ": "<< ip << std::endl;
     }
 }
 
-
+void Server::PrintState() {}

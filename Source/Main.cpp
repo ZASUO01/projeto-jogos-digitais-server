@@ -11,9 +11,8 @@ int main() {
     Random::Init();
 
     Server s;
-    if (s.Initialize()) {
-        s.ReadInputs();
-    }
+    s.Initialize();
+    s.ReadInputs();
     s.Shutdown();
 
     networkingCleanup();

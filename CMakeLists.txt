@@ -25,6 +25,12 @@ add_executable(${PROJECT_NAME}
         Utils/Random.cpp
         Utils/Random.h
         Server/InputData.h
+        Game/ClientState.cpp
+        Game/ClientState.h
+        Server/Connections.h
+        Game/GameState.cpp
+        Game/GameState.h
+        Utils/ThreadQueue.h
 )
 
 if(WIN32)

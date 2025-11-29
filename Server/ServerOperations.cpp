@@ -29,3 +29,24 @@ void ServerOperations::sendSingleResponseToClient(
         clientAddr
     );
 }
+
+void ServerOperations::sendStateDataToClient(
+    const Server *server,
+    const uint32_t nonce,
+    const uint16_t sequence,
+    sockaddr_in *clientAddr,
+    const RawState *state
+) {
+    Packet packet(sequence, Packet::DATA_FLAG, nonce);
+    packet.SetData(state, sizeof(RawState));
+    packet.BuildPacket();
+
+    const size_t packetSize = Packet::PACKET_HEADER_BYTES + packet.GetLength();
+
+    SocketUtils::sendPacketToV4(
+        server->GetSocket(),
+        &packet,
+        packetSize,
+        clientAddr
+    );
+}

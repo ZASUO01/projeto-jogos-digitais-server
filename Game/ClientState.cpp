@@ -15,10 +15,18 @@ ClientState::ClientState(const int id)
 
 void ClientState::ProcessInput(const InputData *command) {
     if (command->IsKeyActive(KeyValue::MOVE_FORWARD)) {
-        mPositionY += 10.0f;
+        mPositionY -= 10.0f;
     }
 
     if (command->IsKeyActive(KeyValue::MOVE_RIGHT)) {
         mPositionX += 10.0f;
+    }
+
+    if (command->IsKeyActive(KeyValue::MOVE_LEFT)) {
+        mPositionX -= 10.0f;
+    }
+
+    if (command->IsKeyActive(KeyValue::MOVE_BACKWARD)) {
+        mPositionY += 10.0f;
     }
 }

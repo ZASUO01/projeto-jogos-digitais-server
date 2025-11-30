@@ -5,7 +5,7 @@
 #pragma once
 #include "../Network/Platforms.h"
 #include "Server.h"
-#include <cstdlib>
+#include "DataObjects.h"
 
 namespace  ServerOperations {
     void sendSingleResponseToClient(
@@ -21,7 +21,7 @@ namespace  ServerOperations {
         uint32_t nonce,
         uint16_t sequence,
         sockaddr_in *clientAddr,
-        const RawState *state
+        const FullState *state
     );
 };
 

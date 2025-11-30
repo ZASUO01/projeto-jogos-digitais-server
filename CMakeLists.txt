@@ -27,10 +27,10 @@ add_executable(${PROJECT_NAME}
         Server/InputData.h
         Game/ClientState.cpp
         Game/ClientState.h
-        Server/Connections.h
         Game/GameState.cpp
         Game/GameState.h
         Utils/ThreadQueue.h
+        Server/DataObjects.h
 )
 
 if(WIN32)

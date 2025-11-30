@@ -7,11 +7,11 @@
 #include <iostream>
 #include <sstream>
 #include <algorithm>
-
-#include "InputData.h"
+#include <cmath>
 #include "ServerOperations.h"
 #include "../Network/Addresses.h"
 #include "../Network/NetUtils.h"
+
 
 int Server::currentClientId = 0;
 
@@ -131,6 +131,22 @@ void Server::Shutdown() {
     std::cout << "Server stopped" << std::endl;
 }
 
+Connection* Server::GetConnection(const int clientId) {
+    const auto it = std::find_if(
+        mConnectedClients.begin(),
+        mConnectedClients.end(),
+        [&clientId](const auto& conn) {
+           return conn.clientId == clientId;
+        }
+    );
+
+    if (it != mConnectedClients.end()) {
+        return &(*it);
+    }
+
+    return nullptr;
+}
+
 void Server::ReceivePackets() {
     bool shouldRun = true;
 
@@ -236,32 +252,48 @@ void Server::CheckConnections() {
 }
 
 void Server::ProcessState() {
-    bool shouldRun = true;
-    const auto tickDuration = std::chrono::milliseconds(1000 / GAME_STATE_TICK_RATE);
+    constexpr float tickDuration = 1.0f / GAME_STATE_TICK_RATE;
+    auto lastUpdateTime = std::chrono::steady_clock::now();
 
     while (true) {
         auto startTime = std::chrono::steady_clock::now();
+        std::chrono::duration<float> timeUpdatedByCommands(0.0f);
 
         {
             std::lock_guard lock(mMutex);
             if (!mRunning) {
-                shouldRun = false;
+                break;
+            }
+
+            ClientCommand command;
+            while (mCommandsQueue.TryDequeue(command)) {
+                if (Connection* conn = GetConnection(command.clientId)) {
+                    mGameState->UpdateStateWithInput(&command.inputData, command.clientId, tickDuration);
+
+                    conn->lastInputSequence = command.sequence;
+                }
+                timeUpdatedByCommands += std::chrono::duration<float>(tickDuration);
             }
         }
+        auto realTimeElapsed = std::chrono::steady_clock::now() - lastUpdateTime;
 
-        if (!shouldRun) {
-            break;
+        if (std::chrono::duration<float> timeDeficit = realTimeElapsed - timeUpdatedByCommands; timeDeficit > std::chrono::duration<float>(0.0f)) {
+            if (int numEmptyTicks = static_cast<int>(std::floor(timeDeficit.count() / tickDuration)); numEmptyTicks > 0) {
+                numEmptyTicks = std::min(numEmptyTicks, 5);
+
+                for (int i = 0; i < numEmptyTicks; ++i) {
+                    mGameState->UpdateState(tickDuration);
+                }
+            }
         }
+        lastUpdateTime = std::chrono::steady_clock::now();
 
-        ClientCommand command;
-        while (mCommandsQueue.try_dequeue(command)) {
-            mGameState->Update(&command.data, command.clientId);
-        }
+        BroadcastState();
 
-        SendStateToClients();
+        auto timeElapsedInThisCycle = std::chrono::steady_clock::now() - startTime;
 
-        if (auto processingTime = std::chrono::steady_clock::now() - startTime; processingTime < tickDuration) {
-            std::this_thread::sleep_for(tickDuration - processingTime);
+        if (auto timeToWait = std::chrono::duration<float>(tickDuration) - timeElapsedInThisCycle; timeToWait > std::chrono::duration<float>(0)) {
+            std::this_thread::sleep_for(timeToWait);
         }
     }
 }
@@ -340,11 +372,14 @@ void Server::HandleAckPacket(const Packet *pk, const sockaddr_in *addr4) {
         return;
     }
 
-    Connection connection;
-    connection.nonce = clientNonce;
-    connection.addr = *addr4;
-    connection.lastUpdate = std::chrono::steady_clock::now();
-    connection.clientId = currentClientId;
+    Connection connection(
+        clientNonce,
+        *addr4,
+        std::chrono::steady_clock::now(),
+        currentClientId,
+        false,
+        0
+    );
 
     mConnectedClients.emplace_back(connection);
     mGameState->AddClient(currentClientId);
@@ -366,11 +401,16 @@ void Server::HandleDataPacket(const Packet *pk) {
     if (conn != mConnectedClients.end()) {
         conn->lastUpdate = std::chrono::steady_clock::now();
 
-        if (const auto data = static_cast<const InputData *>(pk->GetData()); !data->NoKeysActive()) {
-            ClientCommand command;
-            command.clientId = conn->clientId;
-            command.data = *data;
-            mCommandsQueue.Enqueue(command);
+        const auto extract = static_cast<const Command*>(pk->GetData());
+        const size_t extractSize = pk->GetLength() / sizeof(Command);
+        const std::vector commands(extract, extract + extractSize);
+        const uint32_t lastInputSequence = conn->lastInputSequence;
+
+        for (const auto& command : commands) {
+            if (command.sequence > lastInputSequence) {
+                const ClientCommand clientCommand(conn->clientId, command.sequence, command.inputData);
+                mCommandsQueue.Enqueue(clientCommand);
+            }
         }
     }
 }
@@ -402,22 +442,35 @@ void Server::HandleEndPacket(const Packet *pk) {
     }
 }
 
-void Server::SendStateToClients() {
-    std::lock_guard lock(mMutex);
-    for (auto conn : mConnectedClients) {
-        if (conn.disconnectionCall) {
-            continue;
+void Server::BroadcastState() {
+    std::vector<Connection> clientsToSendTo;
+    {
+        std::lock_guard lock(mMutex);
+        for (auto conn : mConnectedClients) {
+            if (!conn.disconnectionCall) {
+                clientsToSendTo.emplace_back(
+                    conn.nonce,
+                    conn.addr,
+                    conn.lastUpdate,
+                    conn.clientId,
+                    conn.disconnectionCall,
+                    conn.lastInputSequence
+                );
+            }
         }
+    }
 
-        RawState state = mGameState->GetRawState(conn.clientId);
+    for (auto& client : clientsToSendTo) {
+        RawState raw = mGameState->GetRawState(client.clientId);
+        FullState full(raw, client.lastInputSequence);
 
         ServerOperations::sendStateDataToClient(
-            this,
-            conn.nonce,
-            0,
-            &conn.addr,
-            &state
-        );
+           this,
+           client.nonce,
+           0,
+           &client.addr,
+           &full
+       );
     }
 }
 

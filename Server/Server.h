@@ -6,19 +6,14 @@
 #include <mutex>
 #include <thread>
 #include <vector>
-#include "./Connections.h"
 #include "../Game/GameState.h"
 #include "../Network/Socket.h"
 #include "../Utils/ThreadQueue.h"
+#include "DataObjects.h"
 
 enum class ServerState {
     SERVER_DOWN,
     SERVER_RUNNING,
-};
-
-struct ClientCommand {
-    InputData data;
-    int clientId;
 };
 
 class Server {
@@ -31,6 +26,9 @@ public:
     void Shutdown();
 
     [[nodiscard]] int GetSocket() const { return mSocket; }
+
+    // Connections control
+    Connection* GetConnection(int clientId);
 private:
     // operations Control
     void InitServerOperations();
@@ -46,7 +44,7 @@ private:
     void HandleAckPacket(const Packet *pk, const sockaddr_in* addr4);
     void HandleDataPacket(const Packet *pk);
     void HandleEndPacket(const Packet *pk);
-    void SendStateToClients();
+    void BroadcastState();
 
     // Helpers called by the server inputs
     void Quit();
@@ -78,6 +76,7 @@ private:
     // Game state control
     static constexpr int GAME_STATE_TICK_RATE = 60;
     GameState *mGameState;
-    std::mutex mCommandsMutex;
+
+    // Client commands control
     ThreadQueue<ClientCommand> mCommandsQueue;
 };

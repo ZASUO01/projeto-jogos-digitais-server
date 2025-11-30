@@ -5,19 +5,17 @@
 #include <unordered_map>
 #include "./ClientState.h"
 #include "../Server/InputData.h"
-
-struct RawState {
-    float posX, posY;
-
-    RawState() : posX(0), posY(0) {}
-};
+#include "../Server/DataObjects.h"
 
 class GameState {
 public:
     GameState();
     void AddClient(int id);
     void RemoveClient(int id);
-    void Update(const InputData *command, int id);
+
+    void UpdateStateWithInput(const InputData *command, int id, float deltaTime);
+    void UpdateState(float deltaTime);
+
     [[nodiscard]] RawState GetRawState(int id);
 private:
     static constexpr int MAX_CLIENTS = 10;

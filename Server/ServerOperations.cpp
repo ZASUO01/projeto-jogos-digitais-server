@@ -35,10 +35,10 @@ void ServerOperations::sendStateDataToClient(
     const uint32_t nonce,
     const uint16_t sequence,
     sockaddr_in *clientAddr,
-    const RawState *state
+    const FullState *state
 ) {
     Packet packet(sequence, Packet::DATA_FLAG, nonce);
-    packet.SetData(state, sizeof(RawState));
+    packet.SetData(state, sizeof(FullState));
     packet.BuildPacket();
 
     const size_t packetSize = Packet::PACKET_HEADER_BYTES + packet.GetLength();

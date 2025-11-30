@@ -23,7 +23,7 @@ public:
         mCondition.notify_one();
     }
 
-    bool try_dequeue(T& item) {
+    bool TryDequeue(T& item) {
         std::lock_guard lock(mMutex);
         if (mQueue.empty()) {
             return false;
@@ -33,7 +33,7 @@ public:
         return true;
     }
 
-    T wait_and_dequeue() {
+    T WaitAndDequeue() {
         std::unique_lock lock(mMutex);
 
         mCondition.wait(lock, [this] { return !mQueue.empty(); });

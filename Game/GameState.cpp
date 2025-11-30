@@ -19,8 +19,12 @@ void GameState::RemoveClient(const int id) {
     mClients.erase(id);
 }
 
-void GameState::Update(const InputData *command, const int id) {
+void GameState::UpdateStateWithInput(const InputData *command, const int id, const float deltaTime) {
     mClients[id]->ProcessInput(command);
+}
+
+void GameState::UpdateState(const float deltaTime) {
+
 }
 
 RawState GameState::GetRawState(const int id)  {

@@ -61,13 +61,12 @@ private:
     // Connections control
     static constexpr int MAX_CONNECTION_REQUESTS = 10;
     static constexpr int MAX_CONNECTIONS = 10;
-    static int currentClientId;
     std::vector<ConnectionRequest> mConnectionRequests;
     std::vector<Connection> mConnectedClients;
 
     // Threads
     static constexpr int CONNECTIONS_CHECK_SLEEP_SECONDS = 1;
-    static constexpr int CONNECTION_TIMEOUT_SECONDS = 10;
+    static constexpr int CONNECTION_TIMEOUT_SECONDS = 30;
     std::mutex mMutex;
     std::thread mReceivingThread;
     std::thread mConnectionsChecker;

@@ -6,11 +6,17 @@
 
 #include <iostream>
 #include <ostream>
+#include <utility>
 
-ClientState::ClientState(const int id)
+ClientState::ClientState(const int id, const int nameIdx, std::string  name)
 :mClientID(id)
+,mNameIdx(nameIdx)
+,mName(std::move(name))
 ,mPositionX(0)
 ,mPositionY(0)
+,mActive(true)
+,mCurrentLife(3)
+,mScore(0)
 {}
 
 void ClientState::ProcessInput(const InputData *command) {

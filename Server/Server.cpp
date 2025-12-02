@@ -12,9 +12,6 @@
 #include "../Network/Addresses.h"
 #include "../Network/NetUtils.h"
 
-
-int Server::currentClientId = 0;
-
 Server::Server()
 :mState(ServerState::SERVER_DOWN)
 ,mSocket(-1)
@@ -372,19 +369,20 @@ void Server::HandleAckPacket(const Packet *pk, const sockaddr_in *addr4) {
         return;
     }
 
+    const int clientId = mGameState->AddClient();
+    if (clientId < 0) {
+        return;
+    }
+
     Connection connection(
         clientNonce,
         *addr4,
         std::chrono::steady_clock::now(),
-        currentClientId,
+        clientId,
         false,
         0
     );
-
     mConnectedClients.emplace_back(connection);
-    mGameState->AddClient(currentClientId);
-
-    currentClientId++;
 }
 
 void Server::HandleDataPacket(const Packet *pk) {
@@ -510,4 +508,7 @@ void Server::PrintClients() {
     }
 }
 
-void Server::PrintState() {}
+void Server::PrintState() {
+    std::lock_guard lock(mMutex);
+    mGameState->Print();
+}

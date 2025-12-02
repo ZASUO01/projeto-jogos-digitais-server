@@ -3,6 +3,8 @@
 //
 #include <memory>
 #include <unordered_map>
+#include <vector>
+#include <string>
 #include "./ClientState.h"
 #include "../Server/InputData.h"
 #include "../Server/DataObjects.h"
@@ -10,14 +12,22 @@
 class GameState {
 public:
     GameState();
-    void AddClient(int id);
+    int AddClient();
     void RemoveClient(int id);
+    void Print();
 
     void UpdateStateWithInput(const InputData *command, int id, float deltaTime);
     void UpdateState(float deltaTime);
 
     [[nodiscard]] RawState GetRawState(int id);
 private:
-    static constexpr int MAX_CLIENTS = 10;
+    static constexpr int MAX_CLIENTS = 4;
+    static const std::vector<std::string> CLIENT_NAMES;
+    std::vector<bool> mUsedNames;
+    static int uniqueID;
+
+    int mHighScore;
+    std::string mHighScoreName;
+
     std::unordered_map<int, std::unique_ptr<ClientState>> mClients;
 };

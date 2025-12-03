@@ -31,6 +31,8 @@ add_executable(${PROJECT_NAME}
         Game/GameState.h
         Utils/ThreadQueue.h
         Server/DataObjects.h
+        Utils/Math.cpp
+        Utils/Math.h
 )
 
 if(WIN32)

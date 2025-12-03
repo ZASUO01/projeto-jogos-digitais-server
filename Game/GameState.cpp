@@ -67,6 +67,7 @@ void GameState::Print() {
 
 void GameState::UpdateStateWithInput(const InputData *command, const int id, const float deltaTime) {
     mClients[id]->ProcessInput(command);
+    mClients[id]->Update(deltaTime);
 }
 
 void GameState::UpdateState(const float deltaTime) {
@@ -75,8 +76,9 @@ void GameState::UpdateState(const float deltaTime) {
 
 RawState GameState::GetRawState(const int id)  {
     RawState state{};
-    state.posX = mClients[id]->mPositionX;
-    state.posY = mClients[id]->mPositionY;
+    state.posX = mClients[id]->mPosition.x;
+    state.posY = mClients[id]->mPosition.y;
+    state.rotation = mClients[id]->mRotation;
 
     return state;
 }

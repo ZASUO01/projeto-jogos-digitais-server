@@ -16,6 +16,9 @@ public:
     void RemoveClient(int id);
     void Print();
 
+    static constexpr int WINDOW_WIDTH = 1024;
+    static constexpr int WINDOW_HEIGHT = 768;
+
     void UpdateStateWithInput(const InputData *command, int id, float deltaTime);
     void UpdateState(float deltaTime);
 

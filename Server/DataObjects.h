@@ -66,9 +66,9 @@ struct ClientCommand {
 };
 
 struct RawState {
-    float posX, posY;
+    float posX, posY, rotation;
 
-    RawState() : posX(0), posY(0) {}
+    RawState() : posX(0), posY(0), rotation(0) {}
 };
 
 struct FullState {

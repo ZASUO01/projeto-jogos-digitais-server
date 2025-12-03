@@ -44,6 +44,7 @@ private:
     void HandleAckPacket(const Packet *pk, const sockaddr_in* addr4);
     void HandleDataPacket(const Packet *pk);
     void HandleEndPacket(const Packet *pk);
+    void HandlePingPacket(const Packet *pk);
     void BroadcastState();
 
     // Helpers called by the server inputs
@@ -59,14 +60,14 @@ private:
     bool mRunning;
 
     // Connections control
-    static constexpr int MAX_CONNECTION_REQUESTS = 10;
-    static constexpr int MAX_CONNECTIONS = 10;
+    static constexpr int MAX_CONNECTION_REQUESTS = 4;
+    static constexpr int MAX_CONNECTIONS = 4;
     std::vector<ConnectionRequest> mConnectionRequests;
     std::vector<Connection> mConnectedClients;
 
     // Threads
     static constexpr int CONNECTIONS_CHECK_SLEEP_SECONDS = 1;
-    static constexpr int CONNECTION_TIMEOUT_SECONDS = 30;
+    static constexpr int CONNECTION_TIMEOUT_SECONDS = 5;
     std::mutex mMutex;
     std::thread mReceivingThread;
     std::thread mConnectionsChecker;

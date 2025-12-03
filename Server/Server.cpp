@@ -194,6 +194,10 @@ void Server::ReceivePackets() {
                 HandleEndPacket(&packet);
                 break;
             }
+            case Packet::PING_FLAG: {
+                HandlePingPacket(&packet);
+                break;
+            }
             default:
                 break;
         }
@@ -437,6 +441,22 @@ void Server::HandleEndPacket(const Packet *pk) {
             Packet::END_ACK_FLAG,
             &conn->addr
         );
+    }
+}
+
+void Server::HandlePingPacket(const Packet *pk) {
+    const auto clientNonce = pk->GetNonce();
+
+    std::lock_guard lock(mMutex);
+    const auto conn = std::find_if(
+        mConnectedClients.begin(),
+        mConnectedClients.end(),
+        [&clientNonce](const Connection& connection) {
+           return connection.nonce == clientNonce;
+    });
+
+    if (conn != mConnectedClients.end()) {
+        conn->lastUpdate = std::chrono::steady_clock::now();
     }
 }
 

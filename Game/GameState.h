@@ -23,6 +23,7 @@ public:
     void UpdateState(float deltaTime);
 
     [[nodiscard]] RawState GetRawState(int id);
+    std::vector<OtherState> GetOtherStates(int id);
 private:
     static constexpr int MAX_CLIENTS = 4;
     static const std::vector<std::string> CLIENT_NAMES;
@@ -32,5 +33,5 @@ private:
     int mHighScore;
     std::string mHighScoreName;
 
-    std::unordered_map<int, std::unique_ptr<ClientState>> mClients;
+    std::unordered_map<int, ClientState> mClients;
 };

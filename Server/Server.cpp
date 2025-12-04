@@ -240,6 +240,7 @@ void Server::CheckConnections() {
                 if (const auto secondsPassed = std::chrono::duration_cast<std::chrono::seconds>(now - it->lastUpdate); secondsPassed >= timeout) {
                     const auto idToRemove = it->clientId;
 
+                    std::lock_guard stateLock(mStateMutex);
                     mGameState->RemoveClient(idToRemove);
 
                     it = mConnectedClients.erase(it);
@@ -269,6 +270,7 @@ void Server::ProcessState() {
             ClientCommand command;
             while (mCommandsQueue.TryDequeue(command)) {
                 if (Connection* conn = GetConnection(command.clientId)) {
+                    std::lock_guard stateLock(mStateMutex);
                     mGameState->UpdateStateWithInput(&command.inputData, command.clientId, tickDuration);
 
                     conn->lastInputSequence = command.sequence;
@@ -283,6 +285,7 @@ void Server::ProcessState() {
                 numEmptyTicks = std::min(numEmptyTicks, 5);
 
                 for (int i = 0; i < numEmptyTicks; ++i) {
+                    std::lock_guard stateLock(mStateMutex);
                     mGameState->UpdateState(tickDuration);
                 }
             }
@@ -363,6 +366,7 @@ void Server::HandleAckPacket(const Packet *pk, const sockaddr_in *addr4) {
             }
         );
         if (conn != mConnectedClients.end()) {
+            std::lock_guard stateLock(mStateMutex);
             mGameState->RemoveClient(conn->clientId);
             mConnectedClients.erase(conn);
         }
@@ -372,6 +376,8 @@ void Server::HandleAckPacket(const Packet *pk, const sockaddr_in *addr4) {
     if (mConnectedClients.size() == MAX_CONNECTIONS) {
         return;
     }
+
+    std::lock_guard stateLock(mStateMutex);
 
     const int clientId = mGameState->AddClient();
     if (clientId < 0) {
@@ -387,6 +393,7 @@ void Server::HandleAckPacket(const Packet *pk, const sockaddr_in *addr4) {
         0
     );
     mConnectedClients.emplace_back(connection);
+
 }
 
 void Server::HandleDataPacket(const Packet *pk) {
@@ -479,8 +486,22 @@ void Server::BroadcastState() {
     }
 
     for (auto& client : clientsToSendTo) {
+        std::lock_guard lock(mStateMutex);
         RawState raw = mGameState->GetRawState(client.clientId);
+        std::vector<OtherState> otherStates = mGameState->GetOtherStates(client.clientId);
+
         FullState full(raw, client.lastInputSequence);
+
+        size_t countToCopy = otherStates.size();
+        if (countToCopy > MAX_OTHER_STATES) {
+            countToCopy = MAX_OTHER_STATES;
+        }
+
+        full.otherStateSize = countToCopy;
+        if (countToCopy > 0) {
+            std::copy_n(otherStates.data(), countToCopy, full.otherStates);
+        }
+
 
         ServerOperations::sendStateDataToClient(
            this,
@@ -529,6 +550,6 @@ void Server::PrintClients() {
 }
 
 void Server::PrintState() {
-    std::lock_guard lock(mMutex);
+    std::lock_guard lock(mStateMutex);
     mGameState->Print();
 }

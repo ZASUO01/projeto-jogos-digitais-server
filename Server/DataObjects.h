@@ -71,10 +71,22 @@ struct RawState {
     RawState() : posX(0), posY(0), rotation(0) {}
 };
 
+struct OtherState {
+    int id;
+    float posX, posY, rotation;
+
+    OtherState(const int id, const float x, const float y, const float rot) :id(id), posX(x), posY(y), rotation(rot) {}
+    OtherState() :id(-1), posX(0), posY(0), rotation(0) {}
+};
+
+#define MAX_OTHER_STATES 3
+
 struct FullState {
     RawState rawState;
+    OtherState otherStates[MAX_OTHER_STATES];
+    size_t otherStateSize;
     uint32_t lastConfirmedInputSequence;
 
-    FullState(const RawState &raw, const uint32_t sequence)
-    :rawState(raw), lastConfirmedInputSequence(sequence) {}
+    FullState(const RawState &raw,const uint32_t sequence)
+    :rawState(raw), otherStateSize(0), lastConfirmedInputSequence(sequence) {}
 };

@@ -69,6 +69,7 @@ private:
     static constexpr int CONNECTIONS_CHECK_SLEEP_SECONDS = 1;
     static constexpr int CONNECTION_TIMEOUT_SECONDS = 5;
     std::mutex mMutex;
+    std::mutex mStateMutex;
     std::thread mReceivingThread;
     std::thread mConnectionsChecker;
     std::thread mStateProcessingThread;

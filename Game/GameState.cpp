@@ -16,7 +16,7 @@ const std::vector<std::string> GameState::CLIENT_NAMES = {
     "NetGhost"
 };
 
-GameState::GameState() {
+GameState::GameState():mHighScore(0) {
     mUsedNames = { false, false , false , false};
 }
 
@@ -32,12 +32,12 @@ int GameState::AddClient() {
     }
 
     const long idx = std::distance(mUsedNames.begin(), it);
-    std::string name = CLIENT_NAMES[idx];
+    const std::string& name = CLIENT_NAMES[idx];
     mUsedNames[idx] = true;
 
     int id = uniqueID;
 
-    mClients.emplace(id, std::make_unique<ClientState>(id, static_cast<int>(idx), name));
+    mClients.emplace(id, ClientState(id, static_cast<int>(idx), name));
 
     uniqueID++;
     return id;
@@ -45,7 +45,7 @@ int GameState::AddClient() {
 
 void GameState::RemoveClient(const int id) {
     if (const auto it = mClients.find(id); it != mClients.end()) {
-        const int nameIndex = it->second->mNameIdx;
+        const int nameIndex = it->second.mNameIdx;
 
         mUsedNames[nameIndex] = false;
 
@@ -61,13 +61,16 @@ void GameState::Print() {
     }
 
     for (const auto &[fst, snd] : mClients) {
-        std::cout << fst << " [" << snd->mName << "]: " << snd->mScore << "\n";
+        std::cout << fst << " [" << snd.mName << "]: " << snd.mScore << "\n";
     }
 }
 
 void GameState::UpdateStateWithInput(const InputData *command, const int id, const float deltaTime) {
-    mClients[id]->ProcessInput(command);
-    mClients[id]->Update(deltaTime);
+    if (const auto it = mClients.find(id); it != mClients.end()) {
+        auto& client = it->second;
+        client.ProcessInput(command);
+        client.Update(deltaTime);
+    }
 }
 
 void GameState::UpdateState(const float deltaTime) {
@@ -76,9 +79,31 @@ void GameState::UpdateState(const float deltaTime) {
 
 RawState GameState::GetRawState(const int id)  {
     RawState state{};
-    state.posX = mClients[id]->mPosition.x;
-    state.posY = mClients[id]->mPosition.y;
-    state.rotation = mClients[id]->mRotation;
+
+    if (const auto it = mClients.find(id); it != mClients.end()) {
+        const auto& client = it->second;
+
+        state.posX = client.mPosition.x;
+        state.posY = client.mPosition.y;
+        state.rotation = client.mRotation;
+    }
 
     return state;
+}
+
+std::vector<OtherState> GameState::GetOtherStates(const int id) {
+    std::vector<OtherState> otherStates;
+
+    for (const auto &[fst, snd]: mClients) {
+        if (fst != id) {
+            otherStates.emplace_back(
+                snd.mClientID,
+                snd.mPosition.x,
+                snd.mPosition.y,
+                snd.mRotation
+            );
+        }
+    }
+
+    return otherStates;
 }

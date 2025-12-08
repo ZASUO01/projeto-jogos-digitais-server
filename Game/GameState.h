@@ -1,6 +1,8 @@
 //
 // Created by pedro-souza on 28/11/2025.
 //
+#pragma once
+
 #include <memory>
 #include <unordered_map>
 #include <vector>
@@ -24,6 +26,7 @@ public:
 
     [[nodiscard]] RawState GetRawState(int id);
     std::vector<OtherState> GetOtherStates(int id);
+    std::unordered_map<int, class ClientState> GetClientStates() { return mClients; }
 private:
     static constexpr int MAX_CLIENTS = 4;
     static const std::vector<std::string> CLIENT_NAMES;
@@ -33,5 +36,5 @@ private:
     int mHighScore;
     std::string mHighScoreName;
 
-    std::unordered_map<int, ClientState> mClients;
+    std::unordered_map<int, class ClientState> mClients;
 };

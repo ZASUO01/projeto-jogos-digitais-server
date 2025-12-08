@@ -38,7 +38,7 @@ int GameState::AddClient() {
 
     int id = uniqueID;
 
-    mClients.emplace(id, ClientState(id, static_cast<int>(idx), name));
+    mClients.emplace(id, ClientState(this, id, static_cast<int>(idx), name));
 
     uniqueID++;
     return id;

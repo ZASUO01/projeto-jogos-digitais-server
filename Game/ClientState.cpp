@@ -19,10 +19,14 @@ ClientState::ClientState(class GameState *gm, const int id, const int nameIdx, s
       , mForwardSpeed(500.0f)
       , mRotation(0.0f)
       , mActive(true)
-      , mCurrentLife(3)
       , mScore(0)
       , mDirection(ClientDirection::right)
-      , mShoot(false) {
+      , mShoot(false)
+      ,mShootCoolDown(0.0f)
+      ,mInvulnerabilityTimer(0.0f)
+      ,mMaxLife(3)
+      ,mHasShot(false)
+{
 }
 
 void ClientState::ProcessInput(const InputData *command) {
@@ -88,9 +92,7 @@ void ClientState::ProcessInput(const InputData *command) {
         mVelocity = Vector2::Zero;
     }
 
-    if (space) {
-        mShoot = true;
-    }
+    mShoot = space;
 }
 
 void ClientState::Update(const float deltaTime) {
@@ -116,23 +118,35 @@ void ClientState::Update(const float deltaTime) {
     }
     mPosition.y += mVelocity.y * deltaTime;
     ScreenWrap(mPosition);
+}
 
-    if (mShoot) {
+void ClientState::UpdateWithoutInput(const float deltaTime) {
+    if (mInvulnerabilityTimer > 0.0f) {
+        mInvulnerabilityTimer -= deltaTime;
+        if (mInvulnerabilityTimer < 0.0f) {
+            mInvulnerabilityTimer = 0.0f;
+        }
+    }
+
+    if (mShootCoolDown > 0.0f) {
+        mShootCoolDown -= deltaTime;
+    }
+
+    if (mShoot && mShootCoolDown <= 0.0f) {
+        mHasShot = true;
+        mShootCoolDown = mShootCoolDownTime;
         mShoot = false;
 
         auto clients = mGameState->GetClientStates();
-        for (auto it = clients.begin(); it != clients.end();) {
-            const auto center = Vector2(it->second.mPosition.x, it->second.mPosition.y);
-            constexpr float radius = 50.0f;
-            const int otherId = it->first;
-
-            if (otherId != mClientID && ShootIntersectOther(center, radius)) {
-                mGameState->RemoveClient(otherId);
+        for (auto&[id, snd] : clients) {
+            auto& client = snd;
+            if (const auto center = Vector2(client.mPosition.x, client.mPosition.y); id != mClientID && ShootIntersectOther(center, COLLIDER_RADIUS)) {
+                mGameState->RemoveClient(id);
             }
-            ++it;
         }
     }
 }
+
 
 void ClientState::ScreenWrap(Vector2 &position){
     if (position.x > GameState::WINDOW_WIDTH) {
@@ -199,4 +213,13 @@ bool ClientState::ShootIntersectOther(const Vector2 &circleCenter, float radius)
     }
 
     return false;
+}
+
+void ClientState::ResetClient() {
+    mPosition.x = 0.0f;
+    mPosition.y = 0.0f;
+    mRotation = 0.0f;
+    mInvulnerabilityTimer = 0.0f;
+    mShootCoolDown = 0.0f;
+    mHasShot = false;
 }

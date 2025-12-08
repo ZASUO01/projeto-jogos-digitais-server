@@ -75,7 +75,10 @@ void GameState::UpdateStateWithInput(const InputData *command, const int id, con
 }
 
 void GameState::UpdateState(const float deltaTime) {
-
+    for (auto&[fst, snd] : mClients) {
+        auto& client = snd;
+        client.UpdateWithoutInput(deltaTime);
+    }
 }
 
 RawState GameState::GetRawState(const int id)  {
@@ -87,6 +90,9 @@ RawState GameState::GetRawState(const int id)  {
         state.posX = client.mPosition.x;
         state.posY = client.mPosition.y;
         state.rotation = client.mRotation;
+        state.active = true;
+    }else {
+        state.active = false;
     }
 
     return state;
@@ -95,14 +101,17 @@ RawState GameState::GetRawState(const int id)  {
 std::vector<OtherState> GameState::GetOtherStates(const int id) {
     std::vector<OtherState> otherStates;
 
-    for (const auto &[fst, snd]: mClients) {
+    for (auto &[fst, snd]: mClients) {
         if (fst != id) {
+            bool shot = snd.HasShot();
             otherStates.emplace_back(
                 snd.mClientID,
                 snd.mPosition.x,
                 snd.mPosition.y,
-                snd.mRotation
+                snd.mRotation,
+                shot
             );
+            snd.CleanHasShot();
         }
     }
 

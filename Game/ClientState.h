@@ -25,6 +25,12 @@ public:
     explicit ClientState(GameState *gm, int id, int nameIdx, std::string  name);
     void ProcessInput(const InputData *command);
     void Update(float deltaTime);
+    void UpdateWithoutInput(float deltaTime);
+
+    void CleanHasShot(){ mHasShot = false; }
+    [[nodiscard]] bool HasShot() const{ return mHasShot; }
+
+    void ResetClient();
 private:
     static void ScreenWrap(Vector2 &position);
 
@@ -46,7 +52,6 @@ private:
 
     // Lifecycle
     bool mActive;
-    int mCurrentLife;
 
     // Score
     int mScore;
@@ -54,8 +59,15 @@ private:
     // direction
     ClientDirection mDirection;
     bool mShoot;
+    float mShootCoolDown;
+    float mInvulnerabilityTimer;
+    int mMaxLife;
+    const float mShootCoolDownTime = 0.2f;
+    const float COLLIDER_RADIUS = 50.0f;
+    bool mHasShot;
+
 
     static float DirectionToRadian(ClientDirection direction);
-    bool ShootIntersectOther( const Vector2& circleCenter, float radius) const;
+    [[nodiscard]] bool ShootIntersectOther( const Vector2& circleCenter, float radius) const;
 friend class GameState;
 };

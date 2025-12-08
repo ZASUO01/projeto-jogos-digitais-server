@@ -4,6 +4,7 @@
 
 #include "GameState.h"
 #include <algorithm>
+#include <cstring>
 #include <iostream>
 #include <iostream>
 

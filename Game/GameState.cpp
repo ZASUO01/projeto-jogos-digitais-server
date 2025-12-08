@@ -44,14 +44,15 @@ int GameState::AddClient() {
     return id;
 }
 
-void GameState::RemoveClient(const int id) {
+std::unordered_map<int, class ClientState>::iterator GameState::RemoveClient(const int id) {
     if (const auto it = mClients.find(id); it != mClients.end()) {
         const int nameIndex = it->second.mNameIdx;
 
         mUsedNames[nameIndex] = false;
 
-        mClients.erase(it);
+       return mClients.erase(it);
     }
+    return mClients.end();
 }
 
 void GameState::Print() {
@@ -91,6 +92,7 @@ RawState GameState::GetRawState(const int id)  {
         state.posY = client.mPosition.y;
         state.rotation = client.mRotation;
         state.active = true;
+        state.life = client.GetLife();
     }else {
         state.active = false;
     }

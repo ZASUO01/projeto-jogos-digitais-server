@@ -2,6 +2,9 @@
 // Created by pedro-souza on 28/11/2025.
 //
 #pragma once
+#include <iostream>
+#include <ostream>
+
 #include "../Server/InputData.h"
 #include <string>
 #include "../Utils/Math.h"
@@ -30,7 +33,13 @@ public:
     void CleanHasShot(){ mHasShot = false; }
     [[nodiscard]] bool HasShot() const{ return mHasShot; }
 
-    void ResetClient();
+    [[nodiscard]] int GetLife() const { return mLife; }
+    void ApplyDamage() {
+        mLife--;
+        mInvulnerabilityTimer = VULNERABILITY_COOLDOWN;
+    }
+
+    [[nodiscard]] bool GetInvulnerability() const { return mInvulnerabilityTimer > 0.0f; }
 private:
     static void ScreenWrap(Vector2 &position);
 
@@ -61,8 +70,9 @@ private:
     bool mShoot;
     float mShootCoolDown;
     float mInvulnerabilityTimer;
-    int mMaxLife;
+    int mLife;
     const float mShootCoolDownTime = 0.2f;
+    const float VULNERABILITY_COOLDOWN = 2.0f;
     const float COLLIDER_RADIUS = 50.0f;
     bool mHasShot;
 

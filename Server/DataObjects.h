@@ -68,8 +68,10 @@ struct ClientCommand {
 struct RawState {
     bool active;
     float posX, posY, rotation;
+    int life;
+    bool invulnerable;
 
-    RawState() : active(false), posX(0), posY(0), rotation(0) {}
+    RawState() : active(false), posX(0), posY(0), rotation(0), life(0), invulnerable(false) {}
 };
 
 struct OtherState {

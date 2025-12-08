@@ -24,7 +24,7 @@ ClientState::ClientState(class GameState *gm, const int id, const int nameIdx, s
       , mShoot(false)
       ,mShootCoolDown(0.0f)
       ,mInvulnerabilityTimer(0.0f)
-      ,mMaxLife(3)
+      ,mLife(3)
       ,mHasShot(false)
 {
 }
@@ -137,16 +137,24 @@ void ClientState::UpdateWithoutInput(const float deltaTime) {
         mShootCoolDown = mShootCoolDownTime;
         mShoot = false;
 
-        auto clients = mGameState->GetClientStates();
-        for (auto&[id, snd] : clients) {
-            auto& client = snd;
+        auto& clients = mGameState->GetClientStates();
+        for (auto it = clients.begin(); it != clients.end();) {
+            auto& id = it->first;
+            auto& client = it->second;
+
             if (const auto center = Vector2(client.mPosition.x, client.mPosition.y); id != mClientID && ShootIntersectOther(center, COLLIDER_RADIUS)) {
-                mGameState->RemoveClient(id);
+                if (client.GetLife() > 1) {
+                    client.ApplyDamage();
+                    ++it;
+                } else {
+                   it = mGameState->RemoveClient(id);
+                }
+            } else {
+                ++it;
             }
         }
     }
 }
-
 
 void ClientState::ScreenWrap(Vector2 &position){
     if (position.x > GameState::WINDOW_WIDTH) {
@@ -187,7 +195,7 @@ float ClientState::DirectionToRadian(const ClientDirection direction) {
     }
 }
 
-bool ClientState::ShootIntersectOther(const Vector2 &circleCenter, float radius) const {
+bool ClientState::ShootIntersectOther(const Vector2 &circleCenter, const float radius) const {
     const float characterRotation = DirectionToRadian(mDirection);
 
     Vector2 direction;
@@ -213,13 +221,4 @@ bool ClientState::ShootIntersectOther(const Vector2 &circleCenter, float radius)
     }
 
     return false;
-}
-
-void ClientState::ResetClient() {
-    mPosition.x = 0.0f;
-    mPosition.y = 0.0f;
-    mRotation = 0.0f;
-    mInvulnerabilityTimer = 0.0f;
-    mShootCoolDown = 0.0f;
-    mHasShot = false;
 }

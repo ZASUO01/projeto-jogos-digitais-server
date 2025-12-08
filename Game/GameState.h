@@ -15,7 +15,7 @@ class GameState {
 public:
     GameState();
     int AddClient();
-    void RemoveClient(int id);
+    std::unordered_map<int, class ClientState>::iterator RemoveClient(int id);
     void Print();
 
     static constexpr int WINDOW_WIDTH = 1024;
@@ -26,7 +26,7 @@ public:
 
     [[nodiscard]] RawState GetRawState(int id);
     std::vector<OtherState> GetOtherStates(int id);
-    std::unordered_map<int, class ClientState> GetClientStates() { return mClients; }
+    std::unordered_map<int, class ClientState>& GetClientStates() { return mClients; }
 private:
     static constexpr int MAX_CLIENTS = 4;
     static const std::vector<std::string> CLIENT_NAMES;

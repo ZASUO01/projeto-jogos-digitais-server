@@ -35,8 +35,10 @@ public:
 
     [[nodiscard]] int GetLife() const { return mLife; }
     void ApplyDamage() {
-        mLife--;
-        mInvulnerabilityTimer = VULNERABILITY_COOLDOWN;
+        if (mInvulnerabilityTimer <= 0.0f) {
+            mLife--;
+            mInvulnerabilityTimer = VULNERABILITY_COOLDOWN;
+        }
     }
 
     [[nodiscard]] bool GetInvulnerability() const { return mInvulnerabilityTimer > 0.0f; }

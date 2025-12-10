@@ -105,13 +105,14 @@ std::vector<OtherState> GameState::GetOtherStates(const int id) {
 
     for (auto &[fst, snd]: mClients) {
         if (fst != id) {
-            bool shot = snd.HasShot();
             otherStates.emplace_back(
                 snd.mClientID,
                 snd.mPosition.x,
                 snd.mPosition.y,
                 snd.mRotation,
-                shot
+                snd.mShoot,
+                snd.mLife,
+                snd.mInvulnerabilityTimer
             );
             snd.CleanHasShot();
         }

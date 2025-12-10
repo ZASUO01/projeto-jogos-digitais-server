@@ -18,8 +18,8 @@ public:
     std::unordered_map<int, class ClientState>::iterator RemoveClient(int id);
     void Print();
 
-    static constexpr int WINDOW_WIDTH = 1024;
-    static constexpr int WINDOW_HEIGHT = 768;
+    static constexpr int WINDOW_WIDTH = 1920;
+    static constexpr int WINDOW_HEIGHT = 1080;
 
     void UpdateStateWithInput(const InputData *command, int id, float deltaTime);
     void UpdateState(float deltaTime);

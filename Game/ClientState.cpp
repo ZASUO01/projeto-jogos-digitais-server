@@ -16,7 +16,7 @@ ClientState::ClientState(class GameState *gm, const int id, const int nameIdx, s
       , mPosition(Vector2::Zero)
       , mVelocity(Vector2::Zero)
       , mColliderRadius(50.0f)
-      , mForwardSpeed(500.0f)
+      , mForwardSpeed(300.0f)
       , mRotation(0.0f)
       , mActive(true)
       , mScore(0)
@@ -24,7 +24,7 @@ ClientState::ClientState(class GameState *gm, const int id, const int nameIdx, s
       , mShoot(false)
       ,mShootCoolDown(0.0f)
       ,mInvulnerabilityTimer(0.0f)
-      ,mLife(3)
+      ,mLife(4)
       ,mHasShot(false)
 {
 }

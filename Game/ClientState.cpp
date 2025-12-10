@@ -142,7 +142,9 @@ void ClientState::UpdateWithoutInput(const float deltaTime) {
             auto& id = it->first;
             auto& client = it->second;
 
-            if (const auto center = Vector2(client.mPosition.x, client.mPosition.y); id != mClientID && ShootIntersectOther(center, COLLIDER_RADIUS)) {
+            if (const auto center = Vector2(client.mPosition.x, client.mPosition.y);
+                id != mClientID && ShootIntersectOther(center, COLLIDER_RADIUS) &&
+                IsDistanceLessThanThreshold(mPosition, center, 400)) {
                 if (client.GetLife() > 1) {
                     client.ApplyDamage();
                     ++it;
@@ -221,4 +223,14 @@ bool ClientState::ShootIntersectOther(const Vector2 &circleCenter, const float r
     }
 
     return false;
+}
+
+bool ClientState::IsDistanceLessThanThreshold(const Vector2 &c1, const Vector2 &c2, const float threshold) {
+    const float dx = c1.x - c2.x;
+    const float dy = c1.y - c2.y;
+
+    const float distanceSq = (dx * dx) + (dy * dy);
+    const float thresholdSq = threshold * threshold;
+
+    return distanceSq < thresholdSq;
 }

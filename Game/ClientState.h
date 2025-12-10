@@ -81,5 +81,6 @@ private:
 
     static float DirectionToRadian(ClientDirection direction);
     [[nodiscard]] bool ShootIntersectOther( const Vector2& circleCenter, float radius) const;
+    static bool IsDistanceLessThanThreshold(const Vector2 &c1, const Vector2 &c2,  float threshold);
 friend class GameState;
 };

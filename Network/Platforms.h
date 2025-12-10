@@ -22,6 +22,8 @@
     #include <ws2tcpip.h>
     #include <windows.h>
     #include <cstdio>
+    #undef near
+    #undef far
     #pragma comment(lib, "ws2_32.lib")
 
     // socket setup
@@ -102,4 +104,3 @@
     #define networkingInit()
     #define networkingCleanup()
 #endif
-
